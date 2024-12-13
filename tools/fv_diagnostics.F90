@@ -24,13 +24,8 @@
 
 module fv_diagnostics_mod
 
-#ifdef OVERLOAD_R4
- use constantsR4_mod,    only: grav, rdgas, rvgas, pi=>pi_8, kappa, WTMAIR, WTMCO2, WTMH2O, &
-                               hlv, cp_air, cp_vapor, TFREEZE
-#else
  use constants_mod,      only: grav, rdgas, rvgas, pi=>pi_8, kappa, WTMAIR, WTMCO2, WTMH2O, &
                                hlv, cp_air, cp_vapor, TFREEZE
-#endif
  use fv_arrays_mod,      only: radius ! scaled for small earth
  use fms_mod,            only: write_version_number
  use time_manager_mod,   only: time_type, get_date, get_time
@@ -783,26 +778,6 @@ contains
              Atm(n)%nudge_diag%nudge_v_dt(isc:iec,jsc:jec,1:npz) = 0.0
           endif
 
-          id_t_dt_diabatic = register_diag_field ( trim(field), 'T_dt_diabatic', axes(1:3), Time,           &
-               'temperature tendency from diabatic processes (t_dt_phys + t_dt_gfdlmp)', 'K/s', missing_value=missing_value )
-          if (id_t_dt_diabatic > 0) then
-             if (.not. allocated(Atm(n)%phys_diag%phys_t_dt)) then
-                allocate(Atm(n)%phys_diag%phys_t_dt(isc:iec,jsc:jec,npz))
-             endif
-             if (.not. allocated(Atm(n)%inline_mp%t_dt)) then
-                allocate(Atm(n)%inline_mp%t_dt(isc:iec,jsc:jec,npz))
-             endif
-          endif
-          id_qv_dt_diabatic = register_diag_field ( trim(field), 'qv_dt_diabatic', axes(1:3), Time,           &
-               'temperature tendency from diabatic processes (qv_dt_phys + qv_dt_gfdlmp)', 'kg/kg/s', missing_value=missing_value )
-          if (id_qv_dt_diabatic > 0) then
-             if (.not. allocated(Atm(n)%phys_diag%phys_qv_dt)) then
-                allocate(Atm(n)%phys_diag%phys_qv_dt(isc:iec,jsc:jec,npz))
-             endif
-             if (.not. allocated(Atm(n)%inline_mp%qv_dt)) then
-                allocate(Atm(n)%inline_mp%qv_dt(isc:iec,jsc:jec,npz))
-             endif
-          endif
        endif
 
 !
@@ -897,7 +872,7 @@ contains
         if (id_t_dt_phys_plev_ave > 0 .and. .not. allocated(Atm(n)%phys_diag%phys_t_dt) ) allocate(Atm(n)%phys_diag%phys_t_dt(isc:iec,jsc:jec,npz))
 
       ! flag for calculation of geopotential
-      if ( any(id_h > 0) .or. id_h_plev>0 .or. id_hght3d>0) then
+      if ( any(id_h > 0) .or. id_h_plev>0 .or. id_hght3d>0 .or. id_inthght>0 .or. id_uz>0 .or. id_iuz>0 .or. id_vz>0 .or. id_ivz>0 ) then
            id_any_hght = 1
       else
            id_any_hght = 0
@@ -1042,6 +1017,11 @@ contains
        id_vt = register_diag_field ( trim(field), 'vt', axes(1:3), Time,        &
             'meridional heat flux', 'K*m/sec', missing_value=missing_value )
 
+       id_uz = register_diag_field ( trim(field), 'uz', axes(1:3), Time,        &
+            'zonal height flux', 'K*m/sec', missing_value=missing_value )
+       id_vz = register_diag_field ( trim(field), 'vz', axes(1:3), Time,        &
+            'meridional height flux', 'K*m/sec', missing_value=missing_value )       
+
        id_uu = register_diag_field ( trim(field), 'uu', axes(1:3), Time,        &
             'zonal flux of zonal wind', '(m/sec)^2', missing_value=missing_value )
        id_uv = register_diag_field ( trim(field), 'uv', axes(1:3), Time,        &
@@ -1074,6 +1054,11 @@ contains
             'vertical integral of ut', 'K*m/sec*Pa', missing_value=missing_value )
        id_ivt = register_diag_field ( trim(field), 'vt_vi', axes(1:2), Time,        &
             'vertical integral of vt', 'K*m/sec*Pa', missing_value=missing_value )
+
+       id_iuz = register_diag_field ( trim(field), 'uz_vi', axes(1:2), Time,        &
+            'vertical integral of uz', 'm*m/sec*Pa', missing_value=missing_value )
+       id_ivz = register_diag_field ( trim(field), 'vz_vi', axes(1:2), Time,        &
+            'vertical integral of vz', 'm*m/sec*Pa', missing_value=missing_value )       
 
        id_iuu = register_diag_field ( trim(field), 'uu_vi', axes(1:2), Time,        &
             'vertical integral of uu', '(m/sec)^2*Pa', missing_value=missing_value )
@@ -1165,7 +1150,10 @@ contains
             'Vertically Integrated Snow', 'kg/m**2', missing_value=missing_value )
        id_intqg = register_diag_field ( trim(field), 'intqg', axes(1:2), Time,        &
             'Vertically Integrated Graupel', 'kg/m**2', missing_value=missing_value )
-
+       id_inthght = register_diag_field ( trim(field), 'inthght', axes(1:2), Time,        &
+            'Vertically Integrated Height', 'kg/m', missing_value=missing_value )
+       id_inttemp = register_diag_field ( trim(field), 'inttemp', axes(1:2), Time,        &
+            'Vertically Integrated Temperature', 'K kg/m**2', missing_value=missing_value )       
        id_acl = register_diag_field ( trim(field), 'acl', axes(1:2), Time,        &
             'Column-averaged Cl mixing ratio', 'kg/kg', missing_value=missing_value )
        id_acl2 = register_diag_field ( trim(field), 'acl2', axes(1:2), Time,        &
@@ -1265,8 +1253,6 @@ contains
                         '100-m AGL u-wind', 'm/s', missing_value=missing_value )
        id_v100m = register_diag_field ( trim(field), 'v100m', axes(1:2), Time,       &
                         '100-m AGL v-wind', 'm/s', missing_value=missing_value )
-       id_wind100m = register_diag_field ( trim(field), 'wind100m', axes(1:2), Time,       &
-                        '100-m AGL windspeed', 'm/s', missing_value=missing_value )
 !--------------------------
 ! relative humidity (physics definition):
 !--------------------------
@@ -1838,11 +1824,6 @@ contains
        if (idiag%id_v_dt_sg > 0) used=send_data(idiag%id_v_dt_sg,  Atm(n)%sg_diag%v_dt(isc:iec,jsc:jec,1:npz), Time)
        if (idiag%id_qv_dt_sg > 0) used=send_data(idiag%id_qv_dt_sg,  Atm(n)%sg_diag%qv_dt(isc:iec,jsc:jec,1:npz), Time)
 
-       if (id_t_dt_diabatic > 0) used=send_data(id_t_dt_diabatic, Atm(n)%phys_diag%phys_t_dt(isc:iec,jsc:jec,1:npz) + &
-                                                Atm(n)%inline_mp%t_dt(isc:iec,jsc:jec,1:npz), Time)
-       if (id_qv_dt_diabatic > 0) used=send_data(id_qv_dt_diabatic, Atm(n)%phys_diag%phys_qv_dt(isc:iec,jsc:jec,1:npz) + &
-                                                Atm(n)%inline_mp%qv_dt(isc:iec,jsc:jec,1:npz), Time)
-
        if(id_c15>0 .or. id_c25>0 .or. id_c35>0 .or. id_c45>0) then
           call wind_max(isc, iec, jsc, jec ,isd, ied, jsd, jed, Atm(n)%ua(isc:iec,jsc:jec,npz),   &
                         Atm(n)%va(isc:iec,jsc:jec,npz), ws_max, Atm(n)%domain)
@@ -1860,7 +1841,7 @@ contains
 
        if ( id_vort200>0 .or. id_vort500>0 .or. id_vort850>0 .or. id_vorts>0   &
             .or. id_vort>0 .or. id_pv>0 .or. id_pv350k>0 .or. id_pv550k>0 &
-            .or. id_srh>0 .or. id_x850>0 .or. id_uh03>0 .or. id_uh25>0 &
+            .or. id_rh>0 .or. id_x850>0 .or. id_uh03>0 .or. id_uh25>0 &
             .or. id_srh1 > 0 .or. id_srh3 > 0 .or. id_srh25 > 0 &
             .or. id_ustm > 0 .or. id_vstm > 0) then
           call get_vorticity(isc, iec, jsc, jec, isd, ied, jsd, jed, npz, Atm(n)%u, Atm(n)%v, wk, &
@@ -2295,7 +2276,7 @@ contains
 
 
 
-       if( id_slp>0 .or. id_tm>0 .or. id_any_hght>0 .or. id_hght3d>0 .or. id_c15>0 .or. id_ctz>0 ) then
+       if( id_slp>0 .or. id_tm>0 .or. id_any_hght>0 .or. id_c15>0 .or. id_ctz>0) then
 
           allocate ( wz(isc:iec,jsc:jec,npz+1) )
           call get_height_field(isc, iec, jsc, jec, ngc, npz, Atm(n)%flagstruct%hydrostatic, Atm(n)%delz,  &
@@ -2305,6 +2286,48 @@ contains
 
           if (id_hght3d > 0) then
              used = send_data(id_hght3d, 0.5*(wz(isc:iec,jsc:jec,1:npz)+wz(isc:iec,jsc:jec,2:npz+1)), Time)
+          endif
+          if (id_inthght > 0) then
+             a2 = 0.
+             do k=1,npz
+             do j=jsc,jec
+             do i=isc,iec
+                a2(i,j) = a2(i,j) + 0.5*(wz(i,j,k)+wz(i,j,k+1))*Atm(n)%delp(i,j,k)
+             enddo
+             enddo
+             enddo
+             used = send_data(id_inthght, a2*ginv, Time)
+          endif
+          allocate ( a4(isc:iec,jsc:jec,npz) )
+          ! zonal height flux
+          if(id_uz > 0 .or. id_iuz > 0) then
+             do k=1,npz
+                do j=jsc,jec
+                   do i=isc,iec
+                      a4(i,j,k) =  Atm(n)%ua(i,j,k) * 0.5*(wz(i,j,k)+wz(i,j,k+1))
+                   enddo
+                enddo
+             enddo
+             if(id_uz > 0) used=send_data(id_uz, a4, Time)
+             if(id_iuz > 0) then
+                call z_sum(isc, iec, jsc, jec, npz, 0, Atm(n)%delp(isc:iec,jsc:jec,1:npz), a4, a2)
+                used=send_data(id_iuz, a2, Time)
+             endif
+          endif
+          ! meridional height flux
+          if(id_vz > 0 .or. id_ivz > 0) then
+             do k=1,npz
+                do j=jsc,jec
+                   do i=isc,iec
+                      a4(i,j,k) =  Atm(n)%va(i,j,k) * 0.5*(wz(i,j,k)+wz(i,j,k+1))
+                   enddo
+                enddo
+             enddo
+             if(id_vz > 0) used=send_data(id_vz, a4, Time)
+             if(id_ivz > 0) then
+                call z_sum(isc, iec, jsc, jec, npz, 0, Atm(n)%delp(isc:iec,jsc:jec,1:npz), a4, a2)
+                used=send_data(id_ivz, a2, Time)
+             endif
           endif
 
           if(id_slp > 0) then
@@ -2877,6 +2900,18 @@ contains
           used = send_data(id_intqg, a2*ginv, Time)
        endif
 
+       if ( id_inttemp>0 ) then
+          a2 = 0.
+          do k=1,npz
+          do j=jsc,jec
+          do i=isc,iec
+             a2(i,j) = a2(i,j) + Atm(n)%pt(i,j,k)*Atm(n)%delp(i,j,k)
+          enddo
+          enddo
+          enddo
+          used = send_data(id_inttemp, a2*ginv, Time)
+       endif
+       
 ! Cloud top temperature & cloud top press:
        if ( (id_ctt>0 .or. id_ctp>0 .or. id_ctz>0).and. Atm(n)%flagstruct%nwat==6) then
             allocate ( var1(isc:iec,jsc:jec) )
@@ -3048,6 +3083,7 @@ contains
           endif
        endif
 
+
 #ifdef GFS_PHYS
        if(id_delp > 0 .or. id_cape > 0 .or. id_cin > 0 .or. &
             ((.not. Atm(n)%flagstruct%hydrostatic) .and. (id_pfnh > 0 .or. id_ppnh > 0)) .or. &
@@ -3198,7 +3234,7 @@ contains
             used=send_data(id_pmaskv2, a2, Time)
        endif
 
-       if ( id_u100m>0 .or. id_v100m>0 .or. id_wind100m>0 .or.  id_w100m>0 .or. id_w5km>0 .or. id_w2500m>0 &
+       if ( id_u100m>0 .or. id_v100m>0 .or.  id_w100m>0 .or. id_w5km>0 .or. id_w2500m>0 &
             & .or. id_w1km>0 .or. id_basedbz>0 .or. id_dbz4km>0) then
           if (.not.allocated(wz)) allocate ( wz(isc:iec,jsc:jec,npz+1) )
           if ( Atm(n)%flagstruct%hydrostatic) then
@@ -3259,29 +3295,15 @@ contains
             used=send_data(id_w100m, a2, Time)
             if(prt_minmax) call prt_mxm('w100m', a2, isc, iec, jsc, jec, 0, 1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
        endif
-
-       if ( id_u100m>0 .or. id_wind100m>0 ) then
-            call interpolate_z(isc, iec, jsc, jec, npz, 100., wz, Atm(n)%ua(isc:iec,jsc:jec,:), u2)
-            if (id_u100m>0) then
-               used=send_data(id_u100m, u2, Time)
-               if(prt_minmax) call prt_mxm('u100m', u2, isc, iec, jsc, jec, 0, 1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
-            endif
+       if ( id_u100m>0 ) then
+            call interpolate_z(isc, iec, jsc, jec, npz, 100., wz, Atm(n)%ua(isc:iec,jsc:jec,:), a2)
+            used=send_data(id_u100m, a2, Time)
+            if(prt_minmax) call prt_mxm('u100m', a2, isc, iec, jsc, jec, 0, 1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
        endif
-       if ( id_v100m>0 .or. id_wind100m>0 ) then
-            call interpolate_z(isc, iec, jsc, jec, npz, 100., wz, Atm(n)%va(isc:iec,jsc:jec,:), v2)
-            if (id_v100m > 0) then
-               used=send_data(id_v100m, v2, Time)
-               if(prt_minmax) call prt_mxm('v100m', v2, isc, iec, jsc, jec, 0, 1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
-            endif
-       endif
-       if ( id_wind100m > 0) then
-          do j=jsc,jec
-             do i=isc,iec
-                a2(i,j) = sqrt(u2(i,j)**2 + v2(i,j)**2)
-             enddo
-          enddo
-          used=send_data(id_wind100m, a2, Time)
-          if(prt_minmax) call prt_mxm('wind100m', a2, isc, iec, jsc, jec, 0, 1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
+       if ( id_v100m>0 ) then
+            call interpolate_z(isc, iec, jsc, jec, npz, 100., wz, Atm(n)%va(isc:iec,jsc:jec,:), a2)
+            used=send_data(id_v100m, a2, Time)
+            if(prt_minmax) call prt_mxm('v100m', a2, isc, iec, jsc, jec, 0, 1, 1., Atm(n)%gridstruct%area_64, Atm(n)%domain)
        endif
 
        if ( rainwat > 0 .and. (id_dbz>0 .or. id_maxdbz>0 .or. id_basedbz>0 .or. id_dbz4km>0 &
@@ -3960,10 +3982,10 @@ contains
 !----------------------------------
 ! compute 3D flux terms
 !----------------------------------
-     allocate ( a4(isc:iec,jsc:jec,npz) )
+     if (.not. allocated(a4)) allocate ( a4(isc:iec,jsc:jec,npz) )
 
      ! zonal moisture flux
-     if(id_uq > 0) then
+     if(id_uq > 0 .or. id_iuq > 0) then
        do k=1,npz
           do j=jsc,jec
              do i=isc,iec
@@ -3971,14 +3993,14 @@ contains
              enddo
           enddo
        enddo
-       used=send_data(id_uq, a4, Time)
+       if(id_uq > 0) used=send_data(id_uq, a4, Time)
        if(id_iuq > 0) then
          call z_sum(isc, iec, jsc, jec, npz, 0, Atm(n)%delp(isc:iec,jsc:jec,1:npz), a4, a2)
          used=send_data(id_iuq, a2, Time)
        endif
      endif
     ! meridional moisture flux
-     if(id_vq > 0) then
+     if(id_vq > 0 .or. id_ivq > 0) then
        do k=1,npz
           do j=jsc,jec
              do i=isc,iec
@@ -3986,7 +4008,7 @@ contains
              enddo
           enddo
        enddo
-       used=send_data(id_vq, a4, Time)
+       if(id_vq > 0) used=send_data(id_vq, a4, Time)
        if(id_ivq > 0) then
          call z_sum(isc, iec, jsc, jec, npz, 0, Atm(n)%delp(isc:iec,jsc:jec,1:npz), a4, a2)
          used=send_data(id_ivq, a2, Time)
@@ -3994,7 +4016,7 @@ contains
      endif
 
      ! zonal heat flux
-     if(id_ut > 0) then
+     if(id_ut > 0 .or. id_iut > 0) then
        do k=1,npz
           do j=jsc,jec
              do i=isc,iec
@@ -4002,14 +4024,14 @@ contains
              enddo
           enddo
        enddo
-       used=send_data(id_ut, a4, Time)
+       if(id_ut > 0) used=send_data(id_ut, a4, Time)
        if(id_iut > 0) then
          call z_sum(isc, iec, jsc, jec, npz, 0, Atm(n)%delp(isc:iec,jsc:jec,1:npz), a4, a2)
          used=send_data(id_iut, a2, Time)
        endif
      endif
      ! meridional heat flux
-     if(id_vt > 0) then
+     if(id_vt > 0 .or. id_ivt > 0) then
        do k=1,npz
           do j=jsc,jec
              do i=isc,iec
@@ -4017,7 +4039,7 @@ contains
              enddo
           enddo
        enddo
-       used=send_data(id_vt, a4, Time)
+       if(id_vt > 0) used=send_data(id_vt, a4, Time)
        if(id_ivt > 0) then
          call z_sum(isc, iec, jsc, jec, npz, 0, Atm(n)%delp(isc:iec,jsc:jec,1:npz), a4, a2)
          used=send_data(id_ivt, a2, Time)
@@ -4025,7 +4047,7 @@ contains
      endif
 
      ! zonal flux of u
-     if(id_uu > 0) then
+     if(id_uu > 0 .or. id_iuu > 0) then
        do k=1,npz
           do j=jsc,jec
              do i=isc,iec
@@ -4033,14 +4055,14 @@ contains
              enddo
           enddo
        enddo
-       used=send_data(id_uu, a4, Time)
+       if(id_uu > 0) used=send_data(id_uu, a4, Time)
        if(id_iuu > 0) then
          call z_sum(isc, iec, jsc, jec, npz, 0, Atm(n)%delp(isc:iec,jsc:jec,1:npz), a4, a2)
          used=send_data(id_iuu, a2, Time)
        endif
      endif
      ! zonal flux of v
-     if(id_uv > 0) then
+     if(id_uv > 0 .or. id_iuv > 0) then
        do k=1,npz
           do j=jsc,jec
              do i=isc,iec
@@ -4048,7 +4070,7 @@ contains
              enddo
           enddo
        enddo
-       used=send_data(id_uv, a4, Time)
+       if(id_uv > 0) used=send_data(id_uv, a4, Time)
        if(id_iuv > 0) then
          call z_sum(isc, iec, jsc, jec, npz, 0, Atm(n)%delp(isc:iec,jsc:jec,1:npz), a4, a2)
          used=send_data(id_iuv, a2, Time)
@@ -5890,7 +5912,6 @@ subroutine eqv_pot(theta_e, pt, delp, delz, peln, pkz, q, is, ie, js, je, ng, np
 end subroutine eqv_pot
 
 #endif
-
 
   subroutine compute_brn(ua, va, delp, delz, cape, bd, npz, Time)
 
